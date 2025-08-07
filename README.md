@@ -53,6 +53,19 @@ jointwise-env\Scripts\activate  # On Windows
 pip install -r requirements.txt
 ```
 
+## Dataset Requirements
+
+**⚠️ Important:** This project requires access to the fastMRI dataset, which is available through NYU Langone Health. 
+
+To use JointWise with fastMRI data, you will need to:
+
+1. **Request Access**: Apply for access to the fastMRI dataset at [https://fastmri.med.nyu.edu/](https://fastmri.med.nyu.edu/)
+2. **Complete Registration**: Follow NYU's registration process and agree to their data usage terms
+3. **Download Dataset**: Once approved, download the knee MRI datasets (multicoil_train, multicoil_val, etc.)
+4. **Update Paths**: Modify the file paths in the demo scripts and notebooks to point to your local fastMRI data directory
+
+The fastMRI dataset is provided for research purposes under specific terms and conditions set by NYU Langone Health. Please ensure you comply with all data usage agreements.
+
 ## Usage
 
 ### FastMRI to DICOM Conversion
