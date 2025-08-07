@@ -181,7 +181,3 @@ This project is intended for research and educational purposes. Please ensure co
 ## Acknowledgments
 
 To be announced.
-
----
-
-For questions or support, please open an issue on this repository.
