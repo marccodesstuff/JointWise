@@ -129,17 +129,25 @@ The annotation CSV contains the following columns:
 jointwise-code/
 ├── README.md                    # This file
 ├── requirements.txt             # Python dependencies
-├── fastmri_to_dicom.py          # FastMRI to DICOM conversion
-├── dicom_to_png.py              # DICOM to PNG conversion
-├── demo.py                      # Basic demo script
-├── knee.csv                     # Knee pathology annotations
+├── .gitignore                   # Git ignore file
+├── pyvenv.cfg                   # Virtual environment configuration
 ├── jointwise-notebook.ipynb     # Main analysis notebook
-├── annotation_demo.ipynb        # Annotation visualization demo
-├── dicom_to_png.ipynb           # DICOM conversion notebook
-├── fastmri_to_png.ipynb         # FastMRI processing notebook
-├── output/                      # Generated DICOM files
-└── png-output/                  # Generated PNG files
+├── annotations/                 # Annotation data
+│   └── knee.csv                 # Knee pathology annotations
+└── demos/                       # Demo scripts and notebooks
+    ├── demo.py                  # Basic demo script
+    ├── fastmri_to_dicom.py      # FastMRI to DICOM conversion
+    ├── dicom_to_png.py          # DICOM to PNG conversion
+    ├── annotation_demo.ipynb    # Annotation visualization demo
+    ├── dicom_to_png.ipynb       # DICOM conversion notebook
+    └── fastmri_to_png.ipynb     # FastMRI processing notebook
 ```
+
+**Note:** The following directories are generated during usage and excluded from version control:
+- `output/` - Generated DICOM files
+- `png-output/` - Generated PNG files
+- `bin/`, `lib/`, `include/`, `share/` - Virtual environment files
+- `.annotation_cache/` - Temporary annotation cache
 
 ## Dependencies
 
@@ -152,15 +160,15 @@ Key libraries used in this project:
 
 ## Getting Started
 
-1. **Quick Demo**: Run `demo.py` to check your dataset paths
-2. **Conversion Workflow**: Use the Jupyter notebooks for step-by-step processing
+1. **Quick Demo**: Run `demos/demo.py` to check your dataset paths
+2. **Conversion Workflow**: Use the Jupyter notebooks in the `demos/` folder for step-by-step processing
 3. **Batch Processing**: Modify the scripts for your specific dataset structure
 
 ### Example Notebooks
 - `jointwise-notebook.ipynb`: Complete workflow from FastMRI to analysis
-- `annotation_demo.ipynb`: Visualize pathology annotations
-- `dicom_to_png.ipynb`: Convert DICOM files to images
-- `fastmri_to_png.ipynb`: Direct FastMRI to PNG conversion
+- `demos/annotation_demo.ipynb`: Visualize pathology annotations
+- `demos/dicom_to_png.ipynb`: Convert DICOM files to images
+- `demos/fastmri_to_png.ipynb`: Direct FastMRI to PNG conversion
 
 ## Contributing
 
