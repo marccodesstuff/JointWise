@@ -155,7 +155,7 @@ def collect_h5_files(input_path: Path, recursive: bool = False) -> list[Path]:
 
 def main():
     # Configure these paths/flags as needed:
-    INPUT_PATH = Path("/mnt/c/Users/Marc/Downloads/temp1/multicoil_train")  # set this to your directory (or single .h5 file)
+    INPUT_PATH = Path("/mnt/c/Users/Marc/Downloads/temp_val/multicoil_val")  # set this to your directory (or single .h5 file)
     OUTPUT_BASE = Path("output-folder")  # base directory where per-file subfolders will be created; can set to None
     RECONSTRUCTION_NAME = "reconstruction_rss"  # e.g., reconstruction_rss
     FLIP_UP_DOWN = True
