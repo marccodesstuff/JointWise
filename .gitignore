@@ -7,3 +7,5 @@ bin
 include
 share
 .annotation_cache
+output-folder
+*.pth
