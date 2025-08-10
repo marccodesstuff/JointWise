@@ -16,4 +16,4 @@ def check_filenames_in_csv(directory, csv_file, csv_column=0):
             print(f"{filename} is NOT present in CSV")
 
 # Example usage:
-check_filenames_in_csv('/mnt/c/Users/Marc/Downloads/multicoil_train', '../annotations/knee-list.csv')
+check_filenames_in_csv('/mnt/c/Users/Marc/Downloads/multicoil_train', 'annotations/knee-list.csv')
