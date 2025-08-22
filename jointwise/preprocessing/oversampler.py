@@ -138,7 +138,6 @@ class BoundingBoxAwareOversampler:
 
         return balanced_data
 
-# TODO: Finish the remaining portion of this class
 class MRIDatasetWithPreAugmentation(Dataset):
     def __init_(self, data, data_processor, transform = None, num_classes = 2):
         self.data = data
