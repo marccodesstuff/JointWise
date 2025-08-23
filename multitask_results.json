@@ -1,8 +1,0 @@
-{
-  "classification_accuracy": 0.282113641388459,
-  "mean_iou": 0.0,
-  "iou_50": 0.0,
-  "iou_75": 0.0,
-  "model_type": "multi_task_resnext50",
-  "dataset_size": 4523
-}

@@ -1,11 +1,2 @@
-output
-*.ipynb_checkpoints/
-lib
-lib64
 png-output
-bin
-include
-share
-.annotation_cache
-output-folder
-*.pth
+png-output.zip
