@@ -22,7 +22,7 @@ STACK_JSON_DIR = ROOT / "runs" / "classic_train_stack" / "stacked_test_json"
 LABELS_TEST_DIR = ROOT / "datasets" / "yolo" / "labels" / "test"
 
 
-def read_stacked_jsons(dir_path: Path) -> Dict[str, List[Dict]]:
+def read_stacked_jsons(dir_path: Path, use_kept_warn_only: bool = False) -> Dict[str, List[Dict]]:
     out = {}
     if not dir_path.exists():
         raise FileNotFoundError(f"Stacked JSON dir not found: {dir_path}")
@@ -30,12 +30,18 @@ def read_stacked_jsons(dir_path: Path) -> Dict[str, List[Dict]]:
         j = json.loads(p.read_text())
         img = j.get("image") or j.get("image_path") or p.stem
         preds = j.get("predictions", [])
-        # normalize boxes and classes
+        # normalize boxes and classes (optionally filter to WBF-kept greens and orange-warned reps)
         out[str(img)] = []
         for e in preds:
             cls = int(e.get("cls", e.get("class", 0)))
             box = tuple(map(float, e.get("box", e.get("bbox", (0,0,0,0)))))
             conf = float(e.get("conf", e.get("score", 0.0)))
+            if use_kept_warn_only:
+                kept = bool(e.get("kept", False))
+                warn = bool(e.get("warn_far_majority", False))
+                # Orange is a subset of kept; include both explicitly for clarity
+                if not (kept or warn):
+                    continue
             out[str(img)].append({"cls": cls, "box": box, "conf": conf})
     return out
 
@@ -251,9 +257,10 @@ def main():
     parser.add_argument("--min-neighbors", type=int, default=0, help="Minimum number of neighbors required to keep a prediction")
     parser.add_argument("--tolerance-px", type=float, default=0.0, help="Expand GT boxes by this many pixels before matching (helps small localization errors)")
     parser.add_argument("--debug", action="store_true", help="Print debug IoU info for first few detections")
+    parser.add_argument("--use-kept-warn-only", action="store_true", help="When evaluating WBF outputs, include only green kept and orange warned boxes (requires WBF JSONs with kept/warn_far_majority fields)")
     args = parser.parse_args()
 
-    preds = read_stacked_jsons(args.stack_dir)
+    preds = read_stacked_jsons(args.stack_dir, use_kept_warn_only=args.use_kept_warn_only)
     gts = prepare_gt(args.labels_dir)
     if args.min_conf > 0.0 or (args.neighbor_iou > 0.0 and args.min_neighbors > 0):
         preds = filter_predictions(preds, min_conf=args.min_conf,
