@@ -1,20 +1,6 @@
 #!/usr/bin/env python3
-"""
-Jointwise Model Development CLI.
-
-Unified command-line interface for the complete pipeline:
-- prepare: Convert CSV annotations to YOLO format
-- augment: Apply data augmentation to balance classes
-- train: Train ensemble models with optional GA tuning
-- evaluate: Compute metrics on test predictions
-
-Usage:
-    python main.py prepare                          # Prepare dataset
-    python main.py augment --target 10000           # Augment training data
-    python main.py train                            # Full training pipeline
-    python main.py train --skip-ga --reuse-models   # Quick inference only
-    python main.py evaluate                         # Evaluate predictions
-"""
+# Jointwise Model Development CLI.
+# Unified command-line interface for prepare, augment, train, and evaluate commands.
 
 from __future__ import annotations
 
@@ -25,11 +11,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 
 
-# =============================================================================
-# Subcommand: prepare
-# =============================================================================
+# Run dataset preparation.
 def cmd_prepare(args):
-    """Run dataset preparation."""
     from src.preparation import prepare_dataset
     
     prepare_dataset(
@@ -42,11 +25,8 @@ def cmd_prepare(args):
     )
 
 
-# =============================================================================
-# Subcommand: augment
-# =============================================================================
+# Run data augmentation.
 def cmd_augment(args):
-    """Run data augmentation."""
     from src.augmentation import augment_dataset
     
     augment_dataset(
@@ -57,11 +37,8 @@ def cmd_augment(args):
     )
 
 
-# =============================================================================
-# Subcommand: train
-# =============================================================================
+# Run training pipeline.
 def cmd_train(args):
-    """Run training pipeline."""
     from ultralytics import YOLO
     
     from src.config import (
@@ -86,7 +63,6 @@ def cmd_train(args):
         compute_class_thresholds, evaluate_confidence_thresholds,
     )
     
-    # Model families
     FAMILIES = [
         ("xception", XCEPTION_YAML),
         ("resnext", RESNEXT_YAML),
@@ -94,7 +70,6 @@ def cmd_train(args):
         ("efficientnet", EFFICIENTNET_YAML),
     ]
     
-    # Configuration
     ga_enabled = GA_ENABLE
     precision_thr = HIGH_PRECISION_CONF_THR
     iou_match_thr = IOU_MATCH
@@ -106,7 +81,6 @@ def cmd_train(args):
     if args.iou_match is not None:
         iou_match_thr = args.iou_match
     
-    # Print configuration
     print("=" * 60)
     print("CONFIGURATION")
     print("=" * 60)
@@ -118,7 +92,6 @@ def cmd_train(args):
     print(f"  Threshold evaluation: {args.eval_thresholds}")
     print("=" * 60)
     
-    # Initialize
     ensure_directories()
     register_custom_modules()
     
@@ -130,7 +103,6 @@ def cmd_train(args):
     create_dataset_yaml(IMAGES_DIR, LABELS_DIR, DATA_YAML, nc=NUM_CLASSES)
     clear_dataset_caches(LABELS_DIR)
     
-    # Phase 1: Train model families
     print("\n" + "=" * 60)
     print("PHASE 1: MODEL TRAINING")
     print("=" * 60)
@@ -161,7 +133,6 @@ def cmd_train(args):
             )
             trained.append((fam, ckpt, hp))
     
-    # Phase 2: Load models
     print("\n" + "=" * 60)
     print("PHASE 2: LOADING MODELS")
     print("=" * 60)
@@ -178,7 +149,6 @@ def cmd_train(args):
     }
     thresholds_path = PROJECT_DIR / "meta_class_thresholds.json"
     
-    # Phase 3: Meta-learner
     print("\n" + "=" * 60)
     print("PHASE 3: META-LEARNER")
     print("=" * 60)
@@ -217,7 +187,6 @@ def cmd_train(args):
     elif args.reuse_meta:
         print(f"[STACK][warn] --reuse-meta but model not found; training new")
     
-    # Validation predictions if needed
     meta_needs_thresholds = meta_loaded and not thresholds_path.exists()
     need_val_preds = (not meta_loaded) or args.eval_thresholds or meta_needs_thresholds
     
@@ -239,7 +208,6 @@ def cmd_train(args):
         val_groups = group_boxes_across_models(per_model_preds_val, val_imgs)
         X_val, y_val, cls_val = build_meta_labels(val_groups, LABELS_DIR / "val")
     
-    # Train meta-learner if needed
     if not meta_loaded:
         if not val_groups or X_val is None or X_val.shape[0] == 0:
             print("[STACK] No validation groups; using fallback averaging")
@@ -279,7 +247,6 @@ def cmd_train(args):
     for cls_id in range(NUM_CLASSES):
         print(f"    Class {cls_id}: {class_thresholds.get(cls_id, precision_thr):.4f}")
     
-    # Phase 4: Threshold evaluation (optional)
     if args.eval_thresholds and val_groups and meta is not None:
         print("\n" + "=" * 60)
         print("PHASE 4: THRESHOLD EVALUATION")
@@ -296,7 +263,6 @@ def cmd_train(args):
             }, f, indent=2)
         print(f"[STACK] Saved evaluation to {eval_file}")
     
-    # Phase 5: Test inference
     print("\n" + "=" * 60)
     print("PHASE 5: TEST INFERENCE")
     print("=" * 60)
@@ -315,7 +281,6 @@ def cmd_train(args):
     else:
         fused = apply_meta_on_groups(test_groups, meta)
     
-    # Write output JSONs
     for img in test_imgs:
         preds = fused.get(img, [])
         filtered = filter_by_confidence(preds, class_thresholds)
@@ -333,11 +298,8 @@ def cmd_train(args):
     print("=" * 60)
 
 
-# =============================================================================
-# Subcommand: evaluate
-# =============================================================================
+# Run evaluation metrics.
 def cmd_evaluate(args):
-    """Run evaluation metrics."""
     import csv
     import numpy as np
     
@@ -348,7 +310,6 @@ def cmd_evaluate(args):
     )
     from src.utils import xywhn_to_xyxy
     
-    # Load data
     print(f"Loading predictions from {args.stack_dir}")
     preds = read_stacked_jsons(args.stack_dir, use_kept_warn_only=args.use_kept_warn_only)
     
@@ -361,7 +322,6 @@ def cmd_evaluate(args):
         preds = {k: v for k, v in preds.items() if k in labelled}
         print(f"Filtered to labelled images: {before} -> {len(preds)}")
     
-    # Load class IoU map
     class_map = None
     if args.class_iou_map is not None:
         try:
@@ -370,14 +330,12 @@ def cmd_evaluate(args):
         except Exception as e:
             print(f"Warning: failed to load class_iou_map: {e}")
     
-    # Apply filtering
     if args.min_conf > 0.0 or (args.neighbor_iou > 0.0 and args.min_neighbors > 0):
         preds = filter_predictions(
             preds, min_conf=args.min_conf,
             neighbor_iou=args.neighbor_iou, min_neighbors=args.min_neighbors
         )
     
-    # Run evaluation
     print("\n" + "=" * 60)
     print("EVALUATION RESULTS")
     print("=" * 60)
@@ -395,7 +353,6 @@ def cmd_evaluate(args):
         pred_expand_mode=args.expand_pred_mode,
     )
     
-    # Multi-IoU mAP
     if args.map_ious is not None:
         try:
             iou_list = [float(x) for x in args.map_ious.split(",")]
@@ -432,7 +389,6 @@ def cmd_evaluate(args):
                     for cl in sorted(per_class_map.keys()):
                         w.writerow([cl, f"{per_class_map[cl]:.6f}"])
     
-    # FROC analysis
     if args.froc:
         try:
             fppi_points = tuple(float(x) for x in args.froc_fppi.split(","))
@@ -457,7 +413,6 @@ def cmd_evaluate(args):
                 for x, y in zip(froc_res["fppi"], froc_res["sens"]):
                     w.writerow([f"{x:.6f}", f"{y:.6f}"])
     
-    # Save results
     if args.save_csv is not None:
         args.save_csv.parent.mkdir(parents=True, exist_ok=True)
         with args.save_csv.open("w", newline="") as f:
@@ -480,18 +435,14 @@ def cmd_evaluate(args):
         print(f"Saved JSON to {args.save_json}")
 
 
-# =============================================================================
-# Argument Parser
-# =============================================================================
+# Build argument parser with subcommands.
 def build_parser():
-    """Build argument parser with subcommands."""
     parser = argparse.ArgumentParser(
         description="Jointwise Model Development CLI",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
     
-    # --- prepare ---
     p_prepare = subparsers.add_parser("prepare", help="Prepare YOLO dataset from CSV")
     p_prepare.add_argument("--png-dir", type=Path, default=None,
                            help="Source PNG directory")
@@ -507,7 +458,6 @@ def build_parser():
                            help="Force rebuild (delete existing)")
     p_prepare.set_defaults(func=cmd_prepare)
     
-    # --- augment ---
     p_augment = subparsers.add_parser("augment", help="Augment training data")
     p_augment.add_argument("--split", choices=["train", "val", "test"], default="train",
                            help="Split to augment")
@@ -519,7 +469,6 @@ def build_parser():
                            help="Preview plan without writing")
     p_augment.set_defaults(func=cmd_augment)
     
-    # --- train ---
     p_train = subparsers.add_parser("train", help="Train ensemble models")
     p_train.add_argument("--skip-ga", action="store_true",
                          help="Skip GA, reuse cached hyperparameters")
@@ -539,7 +488,6 @@ def build_parser():
                          help="Evaluate confidence thresholds")
     p_train.set_defaults(func=cmd_train)
     
-    # --- evaluate ---
     p_eval = subparsers.add_parser("evaluate", help="Evaluate predictions")
     p_eval.add_argument("--stack-dir", type=Path, default=None,
                         help="Directory with stacked JSON predictions")
@@ -593,9 +541,6 @@ def build_parser():
     return parser
 
 
-# =============================================================================
-# Main
-# =============================================================================
 def main():
     parser = build_parser()
     args = parser.parse_args()
@@ -604,7 +549,6 @@ def main():
         parser.print_help()
         sys.exit(1)
     
-    # Set defaults for evaluate command
     if args.command == "evaluate":
         from src.config import STACK_JSON_DIR_DEFAULT, LABELS_TEST_DIR
         if args.stack_dir is None:

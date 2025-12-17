@@ -1,13 +1,5 @@
-"""
-Evaluation metrics for ensemble object detection.
-
-This module provides:
-- Per-class Average Precision (AP) computation
-- Best F1 score along PR curve
-- Adaptive IoU thresholding
-- FROC analysis
-- mAP computation across IoU thresholds
-"""
+# Evaluation metrics for ensemble object detection.
+# Provides per-class AP, best F1, adaptive IoU, FROC analysis, and mAP computation.
 
 from __future__ import annotations
 
@@ -21,21 +13,9 @@ from .config import LABELS_TEST_DIR, STACK_JSON_DIR_DEFAULT
 from .utils import iou_xyxy, xywhn_to_xyxy, expand_box, get_image_size
 
 
-# =============================================================================
-# Data Loading
-# =============================================================================
+# Read stacked prediction JSON files.
 def read_stacked_jsons(dir_path: Path, 
                        use_kept_warn_only: bool = False) -> Dict[str, List[Dict]]:
-    """
-    Read stacked prediction JSON files.
-    
-    Args:
-        dir_path: Directory containing JSON files
-        use_kept_warn_only: Filter to only kept/warned predictions
-    
-    Returns:
-        Dict mapping image_stem -> list of prediction dicts
-    """
     out = {}
     
     if not dir_path.exists():
@@ -46,7 +26,6 @@ def read_stacked_jsons(dir_path: Path,
         img = j.get("image") or j.get("image_path") or p.stem
         preds = j.get("predictions", [])
         
-        # Use filename stem as canonical key
         img_key = Path(str(img)).stem
         out[str(img_key)] = []
         
@@ -69,8 +48,8 @@ def read_stacked_jsons(dir_path: Path,
     return out
 
 
+# Read YOLO label file and return list of (class, (cx,cy,w,h)).
 def read_yolo_label_file(path: Path) -> List[Tuple[int, Tuple[float, float, float, float]]]:
-    """Read YOLO label file and return list of (class, (cx,cy,w,h))."""
     out = []
     if not path.exists():
         return out
@@ -86,19 +65,10 @@ def read_yolo_label_file(path: Path) -> List[Tuple[int, Tuple[float, float, floa
     return out
 
 
+# Load ground truth labels from directory.
 def prepare_gt(gt_dir: Path) -> Dict[str, List[Tuple[int, Tuple[float, float, float, float]]]]:
-    """
-    Load ground truth labels from directory.
-    
-    Args:
-        gt_dir: Directory containing label .txt files
-    
-    Returns:
-        Dict mapping image_stem -> list of (class, (cx,cy,w,h)) in normalized coords
-    """
     out = {}
     
-    # Build image index for size lookups
     images_dir = gt_dir.parent.parent / "images" / "test"
     img_index = {}
     if images_dir.exists():
@@ -113,25 +83,11 @@ def prepare_gt(gt_dir: Path) -> Dict[str, List[Tuple[int, Tuple[float, float, fl
     return out
 
 
-# =============================================================================
-# Prediction Filtering
-# =============================================================================
+# Filter predictions by confidence and isolation.
 def filter_predictions(preds: Dict[str, List[Dict]], 
                        min_conf: float = 0.0,
                        neighbor_iou: float = 0.0, 
                        min_neighbors: int = 0) -> Dict[str, List[Dict]]:
-    """
-    Filter predictions by confidence and isolation.
-    
-    Args:
-        preds: Predictions dict
-        min_conf: Minimum confidence threshold
-        neighbor_iou: IoU threshold for counting neighbors
-        min_neighbors: Minimum neighbors required
-    
-    Returns:
-        Filtered predictions
-    """
     out = {}
     
     for img, ds in preds.items():
@@ -142,7 +98,6 @@ def filter_predictions(preds: Dict[str, List[Dict]],
                 continue
             
             if neighbor_iou > 0 and min_neighbors > 0:
-                # Count neighbors of same class within IoU
                 neigh = 0
                 for j, d2 in enumerate(ds):
                     if i == j:
@@ -162,9 +117,7 @@ def filter_predictions(preds: Dict[str, List[Dict]],
     return out
 
 
-# =============================================================================
-# Adaptive IoU Detection
-# =============================================================================
+# Decide if prediction is TP using adaptive IoU threshold.
 def adaptive_iou_detection(
     pred_box: Tuple[float, ...],
     gt_box: Tuple[float, ...],
@@ -175,43 +128,22 @@ def adaptive_iou_detection(
     max_iou: float = 0.6,
     method: str = "linear"
 ) -> Tuple[bool, float, float]:
-    """
-    Decide if prediction is TP using adaptive IoU threshold.
-    
-    Small objects use lower IoU thresholds; large objects use higher.
-    
-    Args:
-        pred_box, gt_box: (x1,y1,x2,y2) coordinates
-        object_size: GT object size (max dimension). Auto-computed if None.
-        cls: Class ID for class-specific thresholds
-        class_iou_map: Dict mapping class -> (min_iou, max_iou)
-        min_iou, max_iou: Default IoU bounds
-        method: 'linear' or 'logistic' mapping
-    
-    Returns:
-        (is_tp, iou_value, threshold_used)
-    """
-    # Compute IoU
     iou = iou_xyxy(pred_box, gt_box)
     
-    # Compute object size if not provided
     if object_size is None:
         gx1, gy1, gx2, gy2 = gt_box
         gw = max(0.0, gx2 - gx1)
         gh = max(0.0, gy2 - gy1)
         object_size = max(gw, gh)
     
-    # Get threshold bounds
     if class_iou_map is not None and cls is not None and cls in class_iou_map:
         cmin, cmax = class_iou_map[cls]
     else:
         cmin, cmax = float(min_iou), float(max_iou)
     
-    # Size anchors
     SMALL_PX = 24.0
     LARGE_PX = 128.0
     
-    # Map size to threshold
     if method == "logistic":
         x = (object_size - (SMALL_PX + LARGE_PX) / 2.0) / ((LARGE_PX - SMALL_PX) / 6.0)
         frac = 1.0 / (1.0 + np.exp(-x))
@@ -225,9 +157,7 @@ def adaptive_iou_detection(
     return bool(is_tp), float(iou), float(threshold)
 
 
-# =============================================================================
-# Main Evaluation Function
-# =============================================================================
+# Evaluate predictions against ground truth.
 def evaluate(
     preds: Dict[str, List[Dict]],
     gts: Dict[str, List[Tuple[int, Tuple[float, float, float, float]]]],
@@ -241,28 +171,6 @@ def evaluate(
     pred_expand_rel: float = 0.0,
     pred_expand_mode: str = "expand_gt",
 ) -> Dict:
-    """
-    Evaluate predictions against ground truth.
-    
-    Computes per-class AP and best F1 scores.
-    
-    Args:
-        preds: Predictions dict {image_stem: [{"cls", "box", "conf"}, ...]}
-        gts: Ground truth dict {image_stem: [(class, (cx,cy,w,h)), ...]}
-        iou_th: IoU threshold for matching
-        tolerance_px: Pixel tolerance for center distance fallback
-        tolerance_rel: Relative tolerance (fraction of GT size)
-        debug: Print debug info
-        adaptive_iou: Use adaptive IoU thresholds
-        class_iou_map: Per-class IoU bounds for adaptive mode
-        pred_expand_px: Expand predictions by pixels
-        pred_expand_rel: Expand predictions by relative amount
-        pred_expand_mode: 'expand_gt', 'expand_pred', or 'intersect'
-    
-    Returns:
-        Dict with per_class results, mAP, macro_best_f1, etc.
-    """
-    # Collect all classes
     classes = set()
     for img, gs in gts.items():
         for cl, _ in gs:
@@ -282,8 +190,7 @@ def evaluate(
         print(f"NOTE: pred_expand_px={pred_expand_px}, pred_expand_mode={pred_expand_mode}")
     
     for cl in classes:
-        # Build detection list for this class
-        dets = []  # (img, conf, box_xyxy)
+        dets = []
         npos = 0
         
         for img, gt_list in gts.items():
@@ -309,14 +216,12 @@ def evaluate(
             }
             continue
 
-        # Sort by confidence descending
         dets = sorted(dets, key=lambda x: x[1], reverse=True)
 
         tp = np.zeros(len(dets))
         fp = np.zeros(len(dets))
         confs = np.array([d[1] for d in dets], dtype=float)
 
-        # Track matched GTs
         matched = {}
 
         for i, (img, conf, box) in enumerate(dets):
@@ -324,7 +229,6 @@ def evaluate(
             box_orig = tuple(box)
             box_used = box_orig
             
-            # Convert GTs to XYXY pixel coords
             gt_boxes_cl = []
             for idx, (gcl, gxywh) in enumerate(gt_list):
                 if gcl != cl:
@@ -334,12 +238,10 @@ def evaluate(
                 gt_box = xywhn_to_xyxy(cx, cy, w, h, W, H)
                 gt_boxes_cl.append((idx, gt_box))
 
-            # Find best matching GT
             ovmax = 0.0
             jmax = -1
             
             for j, gt_b in gt_boxes_cl:
-                # Compute IoU with optional expansion
                 px = _compute_expansion_px(box_used, pred_expand_px, pred_expand_rel)
                 ov = _compute_iou_with_expansion(
                     box_used, gt_b, px, pred_expand_mode
@@ -349,7 +251,6 @@ def evaluate(
                     ovmax = ov
                     jmax = j
 
-            # Determine threshold
             thr = float(iou_th)
             matched_gt_box = None
             
@@ -372,7 +273,6 @@ def evaluate(
 
             thresholds_per_class[cl].append(float(thr))
 
-            # Check for match
             if ovmax >= thr:
                 key = (img, cl, jmax)
                 if key not in matched:
@@ -381,7 +281,6 @@ def evaluate(
                 else:
                     fp[i] = 1.0
             else:
-                # Center distance fallback
                 if _check_center_distance_match(
                     box, matched_gt_box, jmax, tolerance_px, tolerance_rel
                 ):
@@ -394,13 +293,11 @@ def evaluate(
                 else:
                     fp[i] = 1.0
 
-        # Compute precision/recall
         fp_cum = np.cumsum(fp)
         tp_cum = np.cumsum(tp)
         rec = tp_cum / (npos + 1e-8)
         prec = tp_cum / (tp_cum + fp_cum + 1e-8)
 
-        # Compute AP (area under PR curve)
         mrec = np.concatenate(([0.0], rec, [1.0]))
         mpre = np.concatenate(([0.0], prec, [0.0]))
         
@@ -411,7 +308,6 @@ def evaluate(
         ap = np.sum((mrec[change_idx + 1] - mrec[change_idx]) * mpre[change_idx + 1]) if change_idx.size > 0 else 0.0
         ap_per_class[cl] = float(ap)
         
-        # Best F1
         f1 = 2 * prec * rec / (prec + rec + 1e-8)
         best_idx = int(np.argmax(f1)) if f1.size > 0 else 0
         best_f1 = float(f1[best_idx]) if f1.size > 0 else 0.0
@@ -432,13 +328,11 @@ def evaluate(
             "fn": int(npos - (tp_cum[best_idx] if tp_cum.size > 0 else 0)),
         }
         
-        # Print class results
         mean_thr = float(np.mean(thresholds_per_class[cl])) if thresholds_per_class[cl] else float(iou_th)
         print(f"Class {cl}: AP={ap:.4f}, #gt={npos}, #det={len(dets)} | "
               f"bestF1={best_f1:.4f} (P={best_prec:.3f}, R={best_rec:.3f}, "
               f"conf>={best_conf if best_conf is not None else 'n/a'}) meanIoU={mean_thr:.3f}")
 
-    # Summary
     mAP = float(np.mean(list(ap_per_class.values()))) if ap_per_class else 0.0
     
     print("\nPer-class AP:")
@@ -447,7 +341,6 @@ def evaluate(
     
     print(f"\nmAP@IoU={iou_th}: {mAP:.4f}")
 
-    # Macro best-F1
     valid_cls = [cl for cl in classes if per_class_results.get(cl, {}).get("n_gt", 0) > 0]
     macro_f1 = float(np.mean([per_class_results[cl]["best_f1"] for cl in valid_cls])) if valid_cls else 0.0
     print(f"Macro best-F1: {macro_f1:.4f}")
@@ -463,15 +356,11 @@ def evaluate(
     }
 
 
-# =============================================================================
-# Helper Functions
-# =============================================================================
+# Get image size for evaluation.
 def _get_image_size_for_eval(img_stem: str) -> Tuple[int, int]:
-    """Get image size for evaluation, trying to find actual image file."""
     try:
         from PIL import Image
         
-        # Try to find image in datasets
         if not any(sep in str(img_stem) for sep in ("/", "\\")):
             images_dir = LABELS_TEST_DIR.parent.parent / "images" / "test"
             if images_dir.exists():
@@ -481,16 +370,15 @@ def _get_image_size_for_eval(img_stem: str) -> Tuple[int, int]:
                         with Image.open(candidate) as im:
                             return im.size
         
-        # Try direct path
         with Image.open(img_stem) as im:
             return im.size
     except Exception:
         return (1, 1)
 
 
+# Compute expansion in pixels.
 def _compute_expansion_px(box: Tuple, pred_expand_px: float, 
                           pred_expand_rel: float) -> float:
-    """Compute expansion in pixels."""
     if pred_expand_rel and float(pred_expand_rel) > 0.0:
         bx1, by1, bx2, by2 = box
         bw = max(0.0, bx2 - bx1)
@@ -501,9 +389,9 @@ def _compute_expansion_px(box: Tuple, pred_expand_px: float,
     return 0.0
 
 
+# Compute IoU with optional box expansion.
 def _compute_iou_with_expansion(box: Tuple, gt_box: Tuple, 
                                  px: float, mode: str) -> float:
-    """Compute IoU with optional box expansion."""
     if px <= 0.0:
         return iou_xyxy(box, gt_box)
     
@@ -522,10 +410,10 @@ def _compute_iou_with_expansion(box: Tuple, gt_box: Tuple,
         return iou_xyxy(box, expand_box(gt_box, px))
 
 
+# Check if box matches GT by center distance.
 def _check_center_distance_match(box: Tuple, gt_box: Optional[Tuple],
                                   jmax: int, tolerance_px: float,
                                   tolerance_rel: float) -> bool:
-    """Check if box matches GT by center distance."""
     if jmax == -1 or gt_box is None:
         return False
     
@@ -540,7 +428,6 @@ def _check_center_distance_match(box: Tuple, gt_box: Optional[Tuple],
     if tol_eff <= 0.0:
         return False
     
-    # Compute center distance
     bx1, by1, bx2, by2 = box
     gx1, gy1, gx2, gy2 = gt_box
     bcx = 0.5 * (bx1 + bx2)
@@ -552,31 +439,16 @@ def _check_center_distance_match(box: Tuple, gt_box: Optional[Tuple],
     return center_dist <= tol_eff
 
 
-# =============================================================================
-# FROC Analysis
-# =============================================================================
+# Compute FROC (Free-Response ROC) curve.
 def compute_froc(
     preds: Dict[str, List[Dict]],
     gts: Dict[str, List[Tuple[int, Tuple[float, float, float, float]]]],
     iou_th: float = 0.3,
     fppi_points: Tuple[float, ...] = (0.25, 0.5, 1, 2, 4, 8)
 ) -> Dict:
-    """
-    Compute FROC (Free-Response ROC) curve.
-    
-    Args:
-        preds: Predictions
-        gts: Ground truth
-        iou_th: IoU threshold for matching
-        fppi_points: FPPI points at which to report sensitivity
-    
-    Returns:
-        Dict with fppi, sensitivity arrays and points dict
-    """
     images = sorted(set(list(preds.keys()) + list(gts.keys())))
     n_images = len(images) if len(images) > 0 else 1
 
-    # Prepare GT boxes
     gt_boxes_per_image = {}
     total_gt = 0
     
@@ -590,7 +462,6 @@ def compute_froc(
         gt_boxes_per_image[img] = gt_boxes
         total_gt += len(gt_boxes)
 
-    # Prepare detections
     det_list = []
     for img, ds in preds.items():
         for d in ds:
@@ -602,7 +473,6 @@ def compute_froc(
     if len(det_list) == 0:
         return {"fppi": [], "sens": [], "points": {}}
 
-    # Get unique confidence thresholds
     confs = sorted({c for (_, c, _, _) in det_list}, reverse=True)
 
     fppi_vals = []
@@ -618,7 +488,6 @@ def compute_froc(
             if conf < thr:
                 continue
             
-            # Find best IoU GT
             best_iou = 0.0
             best_idx = -1
             gts_here = gt_boxes_per_image.get(img, [])
@@ -642,7 +511,6 @@ def compute_froc(
         fppi_vals.append(fppi)
         sens_vals.append(sens)
 
-    # Sort and make monotonic
     order = np.argsort(np.array(fppi_vals))
     fppi_sorted = np.array(fppi_vals)[order]
     sens_sorted = np.array(sens_vals)[order]
@@ -651,7 +519,6 @@ def compute_froc(
         if sens_sorted[i] < sens_sorted[i - 1]:
             sens_sorted[i] = sens_sorted[i - 1]
 
-    # Interpolate at requested points
     fppi_points_arr = np.array(list(fppi_points), dtype=float)
     
     if fppi_sorted.size == 0:

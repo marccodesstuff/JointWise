@@ -1,12 +1,5 @@
-"""
-Training utilities including GA hyperparameter tuning.
-
-This module handles:
-- Model training with Ultralytics YOLO
-- Genetic Algorithm (DEAP) hyperparameter optimization
-- Training argument management
-- Checkpoint and hyperparameter caching
-"""
+# Training utilities including GA hyperparameter tuning.
+# Handles model training, DEAP genetic algorithm optimization, and checkpoint caching.
 
 from __future__ import annotations
 
@@ -38,19 +31,8 @@ from .utils import (
 )
 
 
-# =============================================================================
-# Training Argument Helpers
-# =============================================================================
+# Split hyperparameters into trainer and augmentation arguments.
 def merge_train_args(hp: Dict) -> Tuple[Dict, Dict]:
-    """
-    Split hyperparameters into trainer and augmentation arguments.
-    
-    Args:
-        hp: Combined hyperparameters dict
-    
-    Returns:
-        (trainer_args, augmentation_args) tuple
-    """
     aug_keys = set(BASE_AUG.keys())
     trainer, aug = {}, BASE_AUG.copy()
     
@@ -63,17 +45,8 @@ def merge_train_args(hp: Dict) -> Tuple[Dict, Dict]:
     return trainer, aug
 
 
+# Get default training arguments with optional overrides.
 def get_trainer_defaults(overrides: Dict, *, patience: int) -> Dict:
-    """
-    Get default training arguments with optional overrides.
-    
-    Args:
-        overrides: Dictionary of parameters to override
-        patience: Early stopping patience
-    
-    Returns:
-        Combined training arguments
-    """
     base = {
         "optimizer": "AdamW",
         "lr0": 2.5e-3,
@@ -89,25 +62,9 @@ def get_trainer_defaults(overrides: Dict, *, patience: int) -> Dict:
     return {**base, **(overrides or {})}
 
 
-# =============================================================================
-# Model Training
-# =============================================================================
+# Train a YOLO model with given configuration.
 def train_model(model_yaml: Path, data_yaml: Path, epochs: int, patience: int,
                 run_name: str, hp: Optional[Dict] = None) -> Tuple[YOLO, Path]:
-    """
-    Train a YOLO model with given configuration.
-    
-    Args:
-        model_yaml: Path to model architecture YAML
-        data_yaml: Path to dataset YAML
-        epochs: Maximum training epochs
-        patience: Early stopping patience
-        run_name: Name for the training run
-        hp: Optional hyperparameters
-    
-    Returns:
-        (trained_model, run_directory) tuple
-    """
     y = YOLO(str(model_yaml))
     t_over, aug_over = merge_train_args(hp or {})
     kwargs = get_trainer_defaults(t_over, patience=patience)
@@ -130,19 +87,9 @@ def train_model(model_yaml: Path, data_yaml: Path, epochs: int, patience: int,
     return y, Path(res.save_dir)
 
 
+# Evaluate model and return mAP metrics.
 def evaluate_map(model: YOLO, split: str = "val", 
                  data_yaml: Optional[Path] = None) -> Dict[str, float]:
-    """
-    Evaluate model and return mAP metrics.
-    
-    Args:
-        model: Trained YOLO model
-        split: Dataset split to evaluate on
-        data_yaml: Path to dataset YAML
-    
-    Returns:
-        Dict with map50-95, map50, map75 values
-    """
     r = model.val(
         data=str(data_yaml or DATA_YAML),
         split=split,
@@ -166,11 +113,8 @@ def evaluate_map(model: YOLO, split: str = "val",
     return out
 
 
-# =============================================================================
-# GA Cache Management
-# =============================================================================
+# Load cached GA hyperparameters from JSON.
 def read_ga_cache() -> Dict[str, Dict[str, object]]:
-    """Load cached GA hyperparameters from JSON."""
     if not GA_CACHE_JSON.exists():
         return {}
     try:
@@ -179,8 +123,8 @@ def read_ga_cache() -> Dict[str, Dict[str, object]]:
         return {}
 
 
+# Save GA hyperparameters to JSON cache.
 def write_ga_cache(cache: Dict[str, Dict[str, object]]) -> None:
-    """Save GA hyperparameters to JSON cache."""
     try:
         GA_CACHE_JSON.write_text(json.dumps(cache, indent=2), encoding="utf-8")
         print(f"[GA][cache] Updated {GA_CACHE_JSON}")
@@ -188,16 +132,8 @@ def write_ga_cache(cache: Dict[str, Dict[str, object]]) -> None:
         print(f"[GA][cache][WARN] Failed to write cache: {e}")
 
 
+# Extract relevant hyperparameters from Ultralytics args.yaml.
 def extract_hp_from_args_yaml(args_kv: Dict[str, object]) -> Dict[str, object]:
-    """
-    Extract relevant hyperparameters from Ultralytics args.yaml.
-    
-    Args:
-        args_kv: Parsed args.yaml content
-    
-    Returns:
-        Dict with hyperparameters matching our HP_SPACE
-    """
     hp_keys = set(HP_SPACE.keys())
     out: Dict[str, object] = {}
     
@@ -205,7 +141,6 @@ def extract_hp_from_args_yaml(args_kv: Dict[str, object]) -> Dict[str, object]:
         if k in args_kv:
             out[k] = args_kv[k]
     
-    # Also include augmentation keys
     aug_keys = ["hsv_h", "hsv_s", "hsv_v", "degrees", "translate", "scale",
                 "shear", "perspective", "fliplr", "mosaic", "mixup", "copy_paste"]
     for k in aug_keys:
@@ -215,16 +150,8 @@ def extract_hp_from_args_yaml(args_kv: Dict[str, object]) -> Dict[str, object]:
     return out
 
 
+# Try to load hyperparameters from previous training runs.
 def load_previous_ga_from_runs(family: str) -> Optional[Dict[str, object]]:
-    """
-    Try to load hyperparameters from previous training runs.
-    
-    Args:
-        family: Model family name (e.g., 'xception')
-    
-    Returns:
-        Hyperparameters dict or None if not found
-    """
     candidates = [
         PROJECT_DIR / f"{family}_final" / "args.yaml",
         PROJECT_DIR / f"{family}_GAeval" / "args.yaml",
@@ -241,46 +168,19 @@ def load_previous_ga_from_runs(family: str) -> Optional[Dict[str, object]]:
     return None
 
 
-# =============================================================================
-# GA Hyperparameter Conversion
-# =============================================================================
+# Convert GA gene (list of indices) to hyperparameter dict.
 def gene_to_hp(gene: List[int]) -> Dict:
-    """
-    Convert GA gene (list of indices) to hyperparameter dict.
-    
-    Args:
-        gene: List of indices into HP_SPACE options
-    
-    Returns:
-        Hyperparameters dict
-    """
     hp = {}
     for idx, k in enumerate(HP_KEYS):
         hp[k] = HP_SPACE[k][gene[idx] % len(HP_SPACE[k])]
     return hp
 
 
-# =============================================================================
-# Genetic Algorithm
-# =============================================================================
+# Run GA hyperparameter search for a model family.
 def run_ga_for_family(family: str, yml_path: Path, *,
                       force_run: bool = False,
                       prefer_reuse: bool = True,
                       predict_boxes_fn=None) -> Dict:
-    """
-    Run GA hyperparameter search for a model family.
-    
-    Args:
-        family: Model family name
-        yml_path: Path to model YAML
-        force_run: Force GA even if cached values exist
-        prefer_reuse: Try to reuse cached/previous hyperparameters
-        predict_boxes_fn: Optional function for prediction diagnostics
-    
-    Returns:
-        Best hyperparameters dict
-    """
-    # Try reuse first unless forced
     if prefer_reuse and not force_run:
         cache = read_ga_cache()
         if family in cache and cache[family]:
@@ -296,11 +196,9 @@ def run_ga_for_family(family: str, yml_path: Path, *,
         print(f"[GA] Disabled, using defaults (and BASE_AUG) for {family}.")
         return {}
 
-    # Set seeds for reproducibility
     random.seed(GA_SEED)
     np.random.seed(GA_SEED)
 
-    # Choose dataset YAML for GA
     ga_data_yaml = DATA_YAML
     if GA_TUNE_ON_VAL:
         ga_yaml_path = TMP_DIR / f"ga_val_{family}.yaml"
@@ -308,7 +206,6 @@ def run_ga_for_family(family: str, yml_path: Path, *,
         ga_data_yaml = ga_yaml_path
         print(f"[GA] {family}: training on validation split for HP search -> {ga_data_yaml}")
 
-    # Create DEAP structures (check if already created)
     if "FitnessMax" not in creator.__dict__:
         creator.create("FitnessMax", base.Fitness, weights=(1.0,))
     if "Individual" not in creator.__dict__:
@@ -316,7 +213,6 @@ def run_ga_for_family(family: str, yml_path: Path, *,
 
     toolbox = base.Toolbox()
     
-    # Register gene generators
     for i, size in enumerate(HP_SIZES):
         toolbox.register(f"gene_{i}", random.randrange, size)
 
@@ -330,7 +226,6 @@ def run_ga_for_family(family: str, yml_path: Path, *,
     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
 
     def eval_individual(individual):
-        """Fitness function: train briefly and return mAP50."""
         hp = gene_to_hp(individual)
         run_name = f"{family}_GAeval"
         
@@ -344,7 +239,6 @@ def run_ga_for_family(family: str, yml_path: Path, *,
         
         metrics = evaluate_map(y, split="val", data_yaml=ga_data_yaml)
         
-        # Optional diagnostics
         if predict_boxes_fn is not None:
             try:
                 val_dir = IMAGES_DIR / "val"
@@ -373,7 +267,6 @@ def run_ga_for_family(family: str, yml_path: Path, *,
                      indpb=0.15)
     toolbox.register("select", tools.selTournament, tournsize=3)
 
-    # Run evolution
     pop = toolbox.population(n=GA_POP)
     hof = tools.HallOfFame(1)
     
@@ -383,12 +276,10 @@ def run_ga_for_family(family: str, yml_path: Path, *,
         halloffame=hof, verbose=True
     )
 
-    # Extract best
     best_gene = list(hof[0])
     best_hp = gene_to_hp(best_gene)
     print(f"[GA] {family} best hp: {best_hp}")
     
-    # Persist to cache
     cache = read_ga_cache()
     cache[family] = best_hp
     write_ga_cache(cache)
@@ -396,39 +287,22 @@ def run_ga_for_family(family: str, yml_path: Path, *,
     return best_hp
 
 
-# =============================================================================
-# Family Training Pipeline
-# =============================================================================
+# Write model YAML text to a file.
 def write_yaml_file(name: str, text: str) -> Path:
-    """Write model YAML text to a file."""
     p = MODELS_DIR / f"{name}.yaml"
     p.write_text(text)
     return p
 
 
+# Complete training pipeline for a model family.
 def train_family(family: str, yaml_text: str, *,
                  force_ga: bool = False, skip_ga: bool = False,
                  predict_boxes_fn=None) -> Tuple[str, Path, Dict]:
-    """
-    Complete training pipeline for a model family.
-    
-    Args:
-        family: Model family name
-        yaml_text: Model YAML configuration
-        force_ga: Force running GA
-        skip_ga: Skip GA and use cached/default values
-        predict_boxes_fn: Optional prediction function for diagnostics
-    
-    Returns:
-        (family_name, checkpoint_path, hyperparameters) tuple
-    """
     yml = write_yaml_file(family, yaml_text)
     
-    # GA tuning (with reuse)
     best_hp: Dict[str, object] = {}
     
     if skip_ga:
-        # Try reuse only
         cache = read_ga_cache()
         best_hp = cache.get(family) or load_previous_ga_from_runs(family) or {}
         if best_hp:
@@ -443,7 +317,6 @@ def train_family(family: str, yaml_text: str, *,
             predict_boxes_fn=predict_boxes_fn
         )
     
-    # Final training with early stopping
     run_name = f"{family}_final"
     y, run_dir = train_model(
         yml, DATA_YAML,
@@ -453,7 +326,6 @@ def train_family(family: str, yaml_text: str, *,
         hp=best_hp
     )
     
-    # Get best checkpoint
     ckpt = run_dir / "weights" / "best.pt"
     if not ckpt.exists():
         ckpt = run_dir / "weights" / "last.pt"
