@@ -1,0 +1,8 @@
+Pillow
+pandas
+scikit-learn
+numpy
+ultralytics
+timm
+opencv-python
+albumentations
